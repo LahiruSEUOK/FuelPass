@@ -5,6 +5,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_ADMIN_PASSWORD: ${VITE_ADMIN_PASSWORD}
     container_name: fuellk-web
     ports:
       # Maps external port 5555 to internal port 80
