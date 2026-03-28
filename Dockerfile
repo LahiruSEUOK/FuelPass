@@ -37,8 +37,8 @@ COPY docker-nginx.conf /etc/nginx/conf.d/default.conf
 # Copy the build output to replace the default Nginx contents
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Expose port 80 inside the container
-EXPOSE 80
+# Expose port 5555 inside the container
+EXPOSE 5555
 
 # Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
