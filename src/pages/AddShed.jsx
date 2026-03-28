@@ -1,31 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
 import { supabase } from '../supabase';
 import { useGeolocation } from '../utils/useGeolocation';
-
-function LocationMarker({ position, setPosition }) {
-  const map = useMapEvents({
-    click(e) {
-      setPosition(e.latlng);
-      map.flyTo(e.latlng, map.getZoom());
-    },
-  });
-
-  return position === null ? null : (
-    <Marker position={position} icon={new L.DivIcon({
-      className: 'new-shed-pin',
-      html: `<div style="background-color: #007bff; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.3);"></div>`,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
-    })} />
-  );
-}
+import { MapPin, Loader2, AlertCircle, ChevronLeft } from 'lucide-react';
 
 function AddShed() {
   const navigate = useNavigate();
-  const { location } = useGeolocation();
+  const { location, error: geoError } = useGeolocation();
   const [position, setPosition] = useState(null);
   
   const [formData, setFormData] = useState({
@@ -39,17 +20,16 @@ function AddShed() {
   
   const [loading, setLoading] = useState(false);
 
-  // Set initial position if geolocation available
-  React.useEffect(() => {
+  useEffect(() => {
     if (location && !position) {
       setPosition({ lat: location.lat, lng: location.lng });
     }
-  }, [location]);
+  }, [location, position]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!position) {
-      alert('Please click on the map to set the shed location');
+      alert('Location Permissions required.');
       return;
     }
 
@@ -66,79 +46,129 @@ function AddShed() {
     if (error) {
       alert(error.message);
     } else {
-      alert('Shed added successfully!');
+      alert('Station added successfully!');
       navigate('/');
     }
   };
 
-  const center = location ? [location.lat, location.lng] : [7.8731, 80.7718];
-
   return (
-    <div className="container">
-      <h1 className="mb-4">Add Missing Shed</h1>
-      
-      <form onSubmit={handleSubmit} className="card">
-        <div className="form-group">
-          <label className="form-label">Shed Name</label>
-          <input 
-            type="text" 
-            className="form-control" 
-            required 
-            placeholder="e.g. CPC Town Center"
-            value={formData.name}
-            onChange={(e) => setFormData({...formData, name: e.target.value})}
-          />
-        </div>
-        
-        <div className="form-group">
-          <label className="form-label">Address / Street</label>
-          <input 
-            type="text" 
-            className="form-control" 
-            required
-            value={formData.address}
-            onChange={(e) => setFormData({...formData, address: e.target.value})}
-          />
-        </div>
-        
-        <div className="form-group">
-          <label className="form-label">District</label>
-          <select 
-            className="form-control" 
-            required
-            value={formData.district}
-            onChange={(e) => setFormData({...formData, district: e.target.value})}
+    <div>
+      <div className="light-header" style={{ paddingBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <button 
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dark)', boxShadow: 'var(--shadow)' }} 
+            onClick={() => navigate(-1)}
           >
-            <option value="">Select District</option>
-            {['Colombo', 'Gampaha', 'Kalutara', 'Kandy', 'Matale', 'Nuwara Eliya', 'Galle', 'Matara', 'Hambantota', 'Jaffna', 'Kilinochchi', 'Mannar', 'Vavuniya', 'Mullaitivu', 'Batticaloa', 'Ampara', 'Trincomalee', 'Kurunegala', 'Puttalam', 'Anuradhapura', 'Polonnaruwa', 'Badulla', 'Moneragala', 'Ratnapura', 'Kegalle'].map(d => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">Available Fuels (Usually)</label>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <label><input type="checkbox" checked={formData.fuel_petrol} onChange={(e) => setFormData({...formData, fuel_petrol: e.target.checked})} /> Petrol</label>
-            <label><input type="checkbox" checked={formData.fuel_diesel} onChange={(e) => setFormData({...formData, fuel_diesel: e.target.checked})} /> Diesel</label>
-            <label><input type="checkbox" checked={formData.fuel_kerosene} onChange={(e) => setFormData({...formData, fuel_kerosene: e.target.checked})} /> Kerosene</label>
+            <ChevronLeft size={20} />
+          </button>
+          <div style={{ flex: 1, textAlign: 'center', fontSize: '1rem', fontWeight: '700', paddingRight: '36px' }}>
+            New Station
           </div>
         </div>
+      </div>
 
-        <div className="form-group">
-          <label className="form-label">Location (Tap on map to set Pin)</label>
-          <div style={{ height: '300px', width: '100%', borderRadius: 'var(--radius)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-            <MapContainer center={center} zoom={location ? 14 : 7} style={{ height: '100%', width: '100%' }}>
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              <LocationMarker position={position} setPosition={setPosition} />
-            </MapContainer>
+      <div className="container" style={{ paddingBottom: '60px' }}>
+        <form onSubmit={handleSubmit} className="info-container" style={{ marginTop: '0.5rem', padding: '1rem' }}>
+          
+          {/* Mockup-style Location Card */}
+          <div style={{ backgroundColor: 'white', padding: '1rem', borderRadius: '12px', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow)' }}>
+            {geoError ? (
+              <>
+                <div style={{ width: '48px', height: '48px', borderRadius: '14px', backgroundColor: 'rgba(255, 59, 48, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AlertCircle size={24} color="var(--danger)" />
+                </div>
+                <div>
+                  <p style={{ fontWeight: '700', color: 'var(--text-dark)', marginBottom: '0.1rem' }}>GPS Denied</p>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>Enable permissions</p>
+                </div>
+              </>
+            ) : !position ? (
+              <>
+                <div style={{ width: '48px', height: '48px', borderRadius: '14px', backgroundColor: 'var(--info-box)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Loader2 size={24} color="var(--primary)" style={{ animation: 'spin 1s linear infinite' }} />
+                </div>
+                <div>
+                  <p style={{ fontWeight: '700', color: 'var(--text-dark)', marginBottom: '0.1rem' }}>Acquiring Signal</p>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>Finding your location...</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ width: '48px', height: '48px', borderRadius: '14px', backgroundColor: 'rgba(52, 199, 89, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <MapPin size={24} color="var(--success)" />
+                </div>
+                <div>
+                  <p style={{ fontWeight: '700', color: 'var(--text-dark)', marginBottom: '0.1rem' }}>Location Acquired</p>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', fontFamily: 'monospace' }}>
+                    {position.lat.toFixed(4)}, {position.lng.toFixed(4)}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
-        </div>
 
-        <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
-          {loading ? 'Submitting...' : 'Add Shed to Map'}
-        </button>
-      </form>
+          <div className="form-group" style={{ marginBottom: '1rem' }}>
+            <label className="form-label" style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>Station Name</label>
+            <input 
+              type="text" 
+              className="form-control" 
+              style={{ padding: '0.75rem 0.85rem', fontSize: '0.85rem' }}
+              required 
+              placeholder="e.g. CPC Town Center"
+              value={formData.name}
+              onChange={(e) => setFormData({...formData, name: e.target.value})}
+            />
+          </div>
+          
+          <div className="form-group" style={{ marginBottom: '1rem' }}>
+            <label className="form-label" style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>Address / Street</label>
+            <input 
+              type="text" 
+              className="form-control" 
+              style={{ padding: '0.75rem 0.85rem', fontSize: '0.85rem' }}
+              required
+              placeholder="Enter street name"
+              value={formData.address}
+              onChange={(e) => setFormData({...formData, address: e.target.value})}
+            />
+          </div>
+          
+          <div className="form-group" style={{ marginBottom: '1rem' }}>
+            <label className="form-label" style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>District</label>
+            <select 
+              className="form-control" 
+              style={{ padding: '0.75rem 0.85rem', fontSize: '0.85rem' }}
+              required
+              value={formData.district}
+              onChange={(e) => setFormData({...formData, district: e.target.value})}
+            >
+              <option value="">Select District</option>
+              {['Colombo', 'Gampaha', 'Kalutara', 'Kandy', 'Matale', 'Nuwara Eliya', 'Galle', 'Matara', 'Hambantota', 'Jaffna', 'Kilinochchi', 'Mannar', 'Vavuniya', 'Mullaitivu', 'Batticaloa', 'Ampara', 'Trincomalee', 'Kurunegala', 'Puttalam', 'Anuradhapura', 'Polonnaruwa', 'Badulla', 'Moneragala', 'Ratnapura', 'Kegalle'].map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+            <label className="form-label" style={{ color: 'var(--text-light)', marginBottom: '0.5rem', fontSize: '0.75rem' }}>Available Fuels</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.85rem', backgroundColor: 'white', borderRadius: '12px', border: '1px solid var(--border-color)', fontWeight: '600', fontSize: '0.85rem' }}>
+                <input type="checkbox" style={{ width: '1.1rem', height: '1.1rem', accentColor: '#000' }} checked={formData.fuel_petrol} onChange={(e) => setFormData({...formData, fuel_petrol: e.target.checked})} /> Petrol
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.85rem', backgroundColor: 'white', borderRadius: '12px', border: '1px solid var(--border-color)', fontWeight: '600', fontSize: '0.85rem' }}>
+                <input type="checkbox" style={{ width: '1.1rem', height: '1.1rem', accentColor: '#000' }} checked={formData.fuel_diesel} onChange={(e) => setFormData({...formData, fuel_diesel: e.target.checked})} /> Diesel
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.85rem', backgroundColor: 'white', borderRadius: '12px', border: '1px solid var(--border-color)', fontWeight: '600', fontSize: '0.85rem', gridColumn: 'span 2' }}>
+                <input type="checkbox" style={{ width: '1.1rem', height: '1.1rem', accentColor: '#000' }} checked={formData.fuel_kerosene} onChange={(e) => setFormData({...formData, fuel_kerosene: e.target.checked})} /> Kerosene
+              </label>
+            </div>
+          </div>
+
+          <button type="submit" className="btn" style={{ padding: '1rem', backgroundColor: 'var(--primary)', color: 'white', fontSize: '0.9rem' }} disabled={loading || !position}>
+            {loading ? 'Submitting...' : 'Confirm Submission'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, X } from 'lucide-react';
+import { Search, X, Navigation, Fuel } from 'lucide-react';
 import { useSheds } from '../hooks/useSheds';
 import { useGeolocation } from '../utils/useGeolocation';
 import { calculateDistance, formatDistance } from '../utils/distance';
@@ -11,143 +11,220 @@ function ListView() {
   const navigate = useNavigate();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [overrideLocation, setOverrideLocation] = useState(null);
-  const [isSearching, setIsSearching] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all'); // all, open, closed
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef(null);
 
-  const activeLocation = overrideLocation || location;
-
-  const handleSearch = async (e) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
-
-    setIsSearching(true);
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery + ', Sri Lanka')}`);
-      const data = await res.json();
-      
-      if (data && data.length > 0) {
-        setOverrideLocation({
-          lat: parseFloat(data[0].lat),
-          lng: parseFloat(data[0].lon),
-          name: data[0].display_name.split(',')[0]
-        });
-      } else {
-        alert('Location not found. Please try another search term.');
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
       }
-    } catch (err) {
-      console.error('Search error:', err);
-      alert('Failed to search location.');
-    } finally {
-      setIsSearching(false);
     }
-  };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Compute top 5 dropdown suggestions
+  const suggestedSheds = useMemo(() => {
+    if (!searchQuery.trim() || !sheds) return [];
+    const query = searchQuery.toLowerCase();
+    return sheds.filter(shed => 
+      shed.name.toLowerCase().includes(query) || 
+      shed.address.toLowerCase().includes(query) ||
+      shed.district.toLowerCase().includes(query)
+    ).slice(0, 5);
+  }, [searchQuery, sheds]);
 
   const clearSearch = () => {
     setSearchQuery('');
-    setOverrideLocation(null);
+    setShowDropdown(false);
   };
 
-  const sortedSheds = useMemo(() => {
+  const filteredAndSortedSheds = useMemo(() => {
     if (!sheds) return [];
     
-    // If location available, sort by distance
-    const shedsWithDistance = sheds.map(shed => {
+    // Filter by Active Tab
+    let filtered = sheds.filter(shed => {
+      if (activeFilter === 'all') return true;
+      const status = shed.latestReport ? shed.latestReport.status : 'unknown';
+      return status === activeFilter;
+    });
+
+    // Optionally filter the main list by search query as well
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(shed => 
+        shed.name.toLowerCase().includes(query) || 
+        shed.address.toLowerCase().includes(query) ||
+        shed.district.toLowerCase().includes(query)
+      );
+    }
+
+    // Sort by distance using browser GPS
+    const positioned = filtered.map(shed => {
       let dist = Infinity;
-      if (activeLocation) {
-        dist = calculateDistance(activeLocation.lat, activeLocation.lng, shed.lat, shed.lng);
+      if (location) {
+        dist = calculateDistance(location.lat, location.lng, shed.lat, shed.lng);
       }
       return { ...shed, distance: dist };
     });
 
-    return shedsWithDistance.sort((a, b) => a.distance - b.distance);
-  }, [sheds, activeLocation]);
+    return positioned.sort((a, b) => a.distance - b.distance);
+  }, [sheds, location, activeFilter, searchQuery]);
 
   return (
-    <div className="container">
-      <h1 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 'bold' }}>Nearby Sheds</h1>
-      
-      <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        <div style={{ position: 'relative', flex: 1 }}>
+    <div>
+      <div className="light-header">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h1 style={{ margin: 0 }}>Fuel Stations</h1>
+        </div>
+        
+        <div style={{ position: 'relative', marginTop: '1.5rem' }} ref={dropdownRef}>
+          <Search size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#8c8c8c', zIndex: 2 }} />
           <input 
             type="text" 
-            placeholder="Search city or town..." 
-            className="form-control" 
+            className="search-pill" 
+            placeholder="Search by name, city, or district"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ paddingRight: overrideLocation ? '2.5rem' : '1rem' }}
+            onFocus={() => setShowDropdown(true)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setShowDropdown(true);
+            }}
+            style={{ paddingLeft: '3rem', paddingRight: searchQuery ? '3rem' : '1.25rem' }}
           />
-          {overrideLocation && (
+          {searchQuery && (
             <button 
               type="button" 
               onClick={clearSearch} 
-              style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-light)', padding: '5px' }}
+              style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#8c8c8c', padding: 0, zIndex: 2 }}
             >
-              <X size={16} />
+              <X size={20} />
             </button>
           )}
-        </div>
-        <button type="submit" className="btn btn-primary" style={{ padding: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} disabled={isSearching}>
-          <Search size={20} />
-        </button>
-      </form>
 
-      {overrideLocation && (
-        <div style={{ marginBottom: '1rem', fontSize: '0.9rem', color: 'var(--text-light)' }}>
-          Showing results near: <strong style={{ color: 'var(--primary)' }}>{overrideLocation.name}</strong>
-        </div>
-      )}
-
-      {locationError && !overrideLocation && (
-        <div style={{ padding: '1rem', backgroundColor: 'var(--bg-card)', borderRadius: 'var(--radius)', borderLeft: '4px solid var(--warning)', marginBottom: '1rem' }}>
-          Please enable location services or search manually.
-        </div>
-      )}
-
-      {loading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {[1, 2, 3, 4].map(n => (
-            <div key={n} className="card skeleton" style={{ height: '90px', width: '100%' }}></div>
-          ))}
-        </div>
-      )}
-
-      {!loading && sortedSheds.length === 0 && <p>No sheds found.</p>}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {sortedSheds.map(shed => {
-          let status = 'unknown';
-          let queueText = '';
-          
-          if (shed.latestReport) {
-            status = shed.latestReport.status;
-            queueText = shed.latestReport.queue.replace('_', ' ').toUpperCase();
-          }
-
-          return (
-            <div 
-              key={shed.id} 
-              className="card"
-              onClick={() => navigate(`/shed/${shed.id}`)}
-              style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-            >
-              <div>
-                <h2 style={{ fontSize: '1.2rem', marginBottom: '0.25rem' }}>{shed.name}</h2>
-                <p style={{ color: 'var(--text-light)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{shed.address}</p>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <span className={`badge ${status}`}>{status.toUpperCase()}</span>
-                  {queueText && <span className="badge" style={{ backgroundColor: '#e9ecef', color: '#495057' }}>Q: {queueText}</span>}
-                </div>
-              </div>
-              <div style={{ textAlign: 'right', minWidth: '80px' }}>
-                {shed.distance !== Infinity ? (
-                  <div style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
-                    {formatDistance(shed.distance)}
+          {/* Autocomplete Dropdown */}
+          {showDropdown && suggestedSheds.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: '110%',
+              left: 0,
+              right: 0,
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              border: '1px solid var(--border-color)',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+              zIndex: 1000,
+              overflow: 'hidden'
+            }}>
+              {suggestedSheds.map(shed => (
+                <div 
+                  key={`drop-${shed.id}`}
+                  onClick={() => navigate(`/shed/${shed.id}`)}
+                  style={{
+                    padding: '1rem 1.25rem',
+                    borderBottom: '1px solid var(--border-color)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--info-box)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                >
+                  <Navigation size={18} color="var(--primary)" />
+                  <div>
+                    <div style={{ fontWeight: '600', color: 'var(--text-dark)', fontSize: '0.95rem' }}>{shed.name}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>{shed.address} • {shed.district}</div>
                   </div>
-                ) : null}
-              </div>
+                </div>
+              ))}
             </div>
-          );
-        })}
+          )}
+        </div>
+      </div>
+
+      {/* Filter Pills */}
+      <div className="filter-container">
+        <button className={`filter-pill ${activeFilter === 'all' ? 'active' : ''}`} onClick={() => setActiveFilter('all')}>All Stations</button>
+        <button className={`filter-pill ${activeFilter === 'open' ? 'active' : ''}`} onClick={() => setActiveFilter('open')}>Open</button>
+        <button className={`filter-pill ${activeFilter === 'closed' ? 'active' : ''}`} onClick={() => setActiveFilter('closed')}>Closed</button>
+      </div>
+
+      {/* Main List Container */}
+      <div className="container" style={{ paddingBottom: '90px' }}>
+        
+        {locationError && (
+          <div style={{ padding: '1rem', backgroundColor: 'rgba(255, 193, 7, 0.1)', color: '#856404', borderRadius: '12px', marginBottom: '1rem', fontSize: '0.9rem' }}>
+            Enable GPS for accurate distance sorting.
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {[1, 2, 3, 4].map(n => (
+              <div key={n} style={{ height: '90px', backgroundColor: 'var(--border-color)', borderRadius: '20px', animation: 'pulse 1.5s infinite ease-in-out' }}></div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {filteredAndSortedSheds.length === 0 ? (
+              <p style={{ color: 'var(--text-light)', textAlign: 'center', padding: '2rem 0', fontWeight: '500' }}>No stations match your criteria.</p>
+            ) : (
+              filteredAndSortedSheds.map(shed => {
+                let status = 'unknown';
+                let queueText = '';
+                
+                if (shed.latestReport) {
+                  status = shed.latestReport.status;
+                  queueText = shed.latestReport.queue.replace('_', ' ').toUpperCase();
+                }
+
+                let badgeClass = 'neutral';
+                if (status === 'open') badgeClass = 'green';
+                if (status === 'closed') badgeClass = 'red';
+                if (status === 'unknown') badgeClass = 'purple';
+
+                return (
+                  <div 
+                    key={shed.id} 
+                    className="list-item"
+                    onClick={() => navigate(`/shed/${shed.id}`)}
+                  >
+                    <div className="icon-box">
+                      <Fuel size={20} color="var(--primary)" />
+                    </div>
+                    
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.1rem' }}>
+                        <h2 style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--text-dark)' }}>{shed.name}</h2>
+                        <span className={`badge ${badgeClass}`} style={{ fontSize: '0.6rem' }}>{status}</span>
+                      </div>
+                      
+                      <p style={{ color: 'var(--text-light)', fontSize: '0.75rem', marginBottom: '0.3rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {shed.address}
+                      </p>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                        <div style={{ fontWeight: '700', fontSize: '1rem', color: 'var(--text-dark)' }}>
+                          {queueText ? `Q: ${queueText}` : 'Wait: N/A'}
+                        </div>
+                        {shed.distance !== Infinity && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', color: 'var(--text-dark)', fontWeight: '600', fontSize: '0.8rem' }}>
+                            <Navigation size={11} fill="currentColor" />
+                            {formatDistance(shed.distance)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

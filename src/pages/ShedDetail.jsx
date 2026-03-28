@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ChevronLeft, CheckCircle2, Navigation2, Clock, Car } from 'lucide-react';
 import { supabase } from '../supabase';
 import { useSheds } from '../hooks/useSheds';
 
@@ -9,44 +10,42 @@ function ShedDetail() {
   const { sheds, loading: shedsLoading, refresh } = useSheds();
   const [loading, setLoading] = useState(false);
   
-  // Form state
-  const [reportStep, setReportStep] = useState(0); // 0 = view, 1 = status, 2 = queue, 3 = fuels
+  const shed = sheds.find(s => s.id === id);
+  
   const [reportData, setReportData] = useState({
     status: 'open',
     queue: 'none',
-    fuel_petrol: false,
-    fuel_diesel: false,
+    fuel_petrol: true,
+    fuel_diesel: true,
     fuel_kerosene: false
   });
 
-  const shed = sheds.find(s => s.id === id);
+  useEffect(() => {
+    if (shed && shed.latestReport) {
+      const { status, queue, fuel_type } = shed.latestReport;
+      setReportData({
+        status: status || 'open',
+        queue: queue || 'none',
+        fuel_petrol: fuel_type === 'petrol' || fuel_type === 'all',
+        fuel_diesel: fuel_type === 'diesel' || fuel_type === 'all',
+        fuel_kerosene: fuel_type === 'kerosene'
+      });
+    }
+  }, [shed]);
 
-  if (shedsLoading) return <div className="container">Loading...</div>;
-  if (!shed) return <div className="container">Shed not found.</div>;
+  if (shedsLoading) return <div className="container" style={{ textAlign: 'center', padding: '3rem' }}>Loading...</div>;
+  if (!shed) return <div className="container" style={{ textAlign: 'center', padding: '3rem' }}>Station not found.</div>;
 
   const currentStatus = shed.latestReport ? shed.latestReport.status : 'unknown';
   const queueStatus = shed.latestReport ? shed.latestReport.queue.replace('_', ' ').toUpperCase() : 'N/A';
-  
-  const handleConfirm = async () => {
-    if (!shed.latestReport) return;
-    setLoading(true);
-    const { status, queue, fuel_type } = shed.latestReport;
-    
-    await supabase.from('fuel_updates').insert([{
-      shed_id: id,
-      status, queue, fuel_type
-    }]);
-    
-    await refresh();
-    setLoading(false);
-    alert('Thank you! Report confirmed.');
-  };
 
-  const handleSubmitReport = async () => {
+  const handleSubmitReport = async (e) => {
+    e.preventDefault();
     setLoading(true);
-    // Determine main fuel_type based on selection for schematic compliance
+    
     let fuel_type = 'none';
-    if (reportData.fuel_petrol) fuel_type = 'petrol';
+    if (reportData.fuel_petrol && reportData.fuel_diesel) fuel_type = 'all';
+    else if (reportData.fuel_petrol) fuel_type = 'petrol';
     else if (reportData.fuel_diesel) fuel_type = 'diesel';
     else if (reportData.fuel_kerosene) fuel_type = 'kerosene';
 
@@ -58,117 +57,107 @@ function ShedDetail() {
     }]);
     
     await refresh();
-    setReportStep(0);
     setLoading(false);
-    alert('Thank you for your report!');
+    navigate('/');
   };
 
   return (
-    <div className="container">
-      <button className="btn" style={{ marginBottom: '1rem', padding: '0.5rem 1rem', border: '1px solid var(--border-color)', backgroundColor: 'transparent' }} onClick={() => navigate(-1)}>
-        &larr; Back
-      </button>
-
-      <div className="card">
-        <h1 style={{ marginBottom: '0.5rem' }}>{shed.name}</h1>
-        <p style={{ color: 'var(--text-light)', marginBottom: '1rem' }}>{shed.address}</p>
+    <div style={{ backgroundColor: 'var(--bg-color)', minHeight: '100vh' }}>
+      <div className="container" style={{ padding: '0.75rem 1rem', paddingBottom: '5rem' }}>
         
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem', backgroundColor: 'var(--bg-color)', padding: '1rem', borderRadius: 'var(--radius)' }}>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-light)', textTransform: 'uppercase' }}>Status</div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }} className={currentStatus === 'open' ? 'text-success' : currentStatus === 'closed' ? 'text-danger' : ''}>
-              {currentStatus.toUpperCase()}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-light)', textTransform: 'uppercase' }}>Queue</div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{queueStatus}</div>
+        {/* Sleek Top Navigation */}
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem', marginTop: '0.5rem' }}>
+          <button 
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dark)', boxShadow: 'var(--shadow)' }} 
+            onClick={() => navigate(-1)}
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <div style={{ flex: 1, textAlign: 'center', fontSize: '1rem', fontWeight: '700', paddingRight: '36px' }}>
+            Station Details
           </div>
         </div>
 
-        {shed.latestReport && reportStep === 0 && (
-          <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem' }}>
-            <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleConfirm} disabled={loading}>
-              {loading ? 'Confirming...' : '✅ Still Accurate'}
-            </button>
-            <button className="btn" style={{ flex: 1, backgroundColor: '#6f42c1', color: 'white' }} onClick={() => setReportStep(1)}>
-              📝 Update Info
-            </button>
+        {/* Header Info */}
+        <div style={{ marginBottom: '1.25rem', textAlign: 'center' }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.2rem', letterSpacing: '-0.5px' }}>{shed.name}</h1>
+          <p style={{ color: 'var(--text-light)', fontSize: '0.85rem' }}>{shed.address}</p>
+        </div>
+
+        {/* Current Status Badge Area like the mockup's delivery info */}
+        <div className="info-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-light)', fontWeight: '700', letterSpacing: '0.5px' }}>STATUS</span>
+            <span style={{ fontSize: '1.15rem', fontWeight: '800', textTransform: 'uppercase', color: currentStatus === 'open' ? 'var(--success)' : currentStatus === 'closed' ? 'var(--danger)' : 'var(--badge-purple)' }}>
+              {currentStatus}
+            </span>
           </div>
-        )}
+          
+          <div style={{ width: '1px', backgroundColor: 'var(--border-color)', height: '28px' }}></div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', alignItems: 'flex-end' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-light)', fontWeight: '700', letterSpacing: '0.5px' }}>QUEUE LINE</span>
+            <span style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--text-dark)' }}>{queueStatus}</span>
+          </div>
+        </div>
 
-        {!shed.latestReport && reportStep === 0 && (
-          <button className="btn btn-primary" style={{ width: '100%', marginBottom: '1.5rem' }} onClick={() => setReportStep(1)}>
-            Submit First Report
-          </button>
-        )}
+        {/* Form area styled like an info panel */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <h2 style={{ fontSize: '1.05rem', fontWeight: '700', marginBottom: '0.75rem', paddingLeft: '0.25rem' }}>Update Information</h2>
+          
+          <form onSubmit={handleSubmitReport} className="info-container" style={{ padding: '1.25rem' }}>
 
-        {reportStep > 0 && (
-          <div style={{ backgroundColor: 'var(--bg-color)', padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)' }}>
-            <h3 style={{ marginBottom: '1rem' }}>Updating Shed Info</h3>
-            
-            {reportStep === 1 && (
-              <div>
-                <label className="form-label">Is the shed open?</label>
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                  <button className={`btn ${reportData.status === 'open' ? 'btn-primary' : ''}`} style={{ flex: 1, backgroundColor: reportData.status !== 'open' ? 'white' : '', color: reportData.status !== 'open' ? 'black' : '', border: '1px solid var(--border-color)' }} onClick={() => setReportData({...reportData, status: 'open'})}>Open</button>
-                  <button className={`btn ${reportData.status === 'closed' ? 'btn-danger' : ''}`} style={{ flex: 1, backgroundColor: reportData.status !== 'closed' ? 'white' : '', color: reportData.status !== 'closed' ? 'black' : '', border: '1px solid var(--border-color)' }} onClick={() => setReportData({...reportData, status: 'closed'})}>Closed</button>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                  <button className="btn" onClick={() => setReportStep(0)}>Cancel</button>
-                  <button className="btn btn-primary" onClick={() => setReportStep(2)}>Next &rarr;</button>
-                </div>
+            <div className="form-group" style={{ marginBottom: '1rem' }}>
+              <label className="form-label" style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>Station availability</label>
+              <div className="options-grid">
+                <button type="button" className={`option-btn ${reportData.status === 'open' ? 'selected' : ''}`} style={{ padding: '0.7rem', fontSize: '0.85rem' }} onClick={() => setReportData({...reportData, status: 'open'})}>
+                  Open
+                </button>
+                <button type="button" className={`option-btn ${reportData.status === 'closed' ? 'selected danger' : ''}`} style={{ padding: '0.7rem', fontSize: '0.85rem' }} onClick={() => setReportData({...reportData, status: 'closed'})}>
+                  Closed
+                </button>
               </div>
-            )}
+            </div>
 
-            {reportStep === 2 && (
-              <div>
-                <label className="form-label">How long is the queue?</label>
+            <div className="form-group" style={{ marginBottom: '1rem' }}>
+              <label className="form-label" style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>Queue estimate</label>
+              <div style={{ position: 'relative' }}>
                 <select 
                   className="form-control" 
-                  style={{ marginBottom: '1rem' }}
                   value={reportData.queue} 
                   onChange={(e) => setReportData({...reportData, queue: e.target.value})}
+                  style={{ backgroundColor: 'white', border: '1px solid var(--border-color)', padding: '0.75rem 0.85rem', fontSize: '0.85rem' }}
                 >
-                  <option value="none">No Queue / Very Fast</option>
-                  <option value="short">Short (Under 30 mins)</option>
+                  <option value="none">Drive In (No Queue)</option>
+                  <option value="short">Short (&lt; 30 mins)</option>
                   <option value="long">Long (1 - 3 hours)</option>
-                  <option value="very_long">Very Long (3+ hours)</option>
+                  <option value="very_long">Severe (3+ hours)</option>
                 </select>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <button className="btn" onClick={() => setReportStep(1)}>&larr; Back</button>
-                  <button className="btn btn-primary" onClick={() => setReportStep(3)}>Next &rarr;</button>
-                </div>
+                <Clock size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)', pointerEvents: 'none' }} />
               </div>
-            )}
+            </div>
 
-            {reportStep === 3 && (
-              <div>
-                <label className="form-label" style={{ marginBottom: '0.5rem' }}>Which fuels are available?</label>
-                
-                <div style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
-                    <input type="checkbox" checked={reportData.fuel_petrol} onChange={(e) => setReportData({...reportData, fuel_petrol: e.target.checked})} /> Petrol
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
-                    <input type="checkbox" checked={reportData.fuel_diesel} onChange={(e) => setReportData({...reportData, fuel_diesel: e.target.checked})} /> Diesel
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
-                    <input type="checkbox" checked={reportData.fuel_kerosene} onChange={(e) => setReportData({...reportData, fuel_kerosene: e.target.checked})} /> Kerosene
-                  </label>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <button className="btn" onClick={() => setReportStep(2)}>&larr; Back</button>
-                  <button className="btn btn-primary" onClick={handleSubmitReport} disabled={loading}>
-                    {loading ? 'Submitting...' : 'Submit Report'}
-                  </button>
-                </div>
+            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+              <label className="form-label" style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>Fuels available</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', padding: '0.85rem', backgroundColor: 'white', border: '1px solid var(--border-color)', borderRadius: '12px', gap: '0.6rem', fontWeight: '600', fontSize: '0.85rem' }}>
+                  <input type="checkbox" style={{ width: '1.1rem', height: '1.1rem', accentColor: '#000' }} checked={reportData.fuel_petrol} onChange={(e) => setReportData({...reportData, fuel_petrol: e.target.checked})} />
+                  Petrol
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', padding: '0.85rem', backgroundColor: 'white', border: '1px solid var(--border-color)', borderRadius: '12px', gap: '0.6rem', fontWeight: '600', fontSize: '0.85rem' }}>
+                  <input type="checkbox" style={{ width: '1.1rem', height: '1.1rem', accentColor: '#000' }} checked={reportData.fuel_diesel} onChange={(e) => setReportData({...reportData, fuel_diesel: e.target.checked})} />
+                  Diesel
+                </label>
               </div>
-            )}
-          </div>
-        )}
+            </div>
 
+            {/* Mockup "Slide to confirm" style button -> large primary pill */}
+            <button type="submit" className="btn" style={{ backgroundColor: 'var(--primary)', color: 'white', padding: '1rem', fontSize: '0.9rem' }} disabled={loading}>
+              <Car size={18} />
+              {loading ? 'Submitting...' : 'Confirm Status Update'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );

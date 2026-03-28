@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  fuellk-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fuellk-web
+    ports:
+      # Maps external port 5555 to internal port 80
+      - "5555:80"
+    restart: unless-stopped
+    # If Vite required env variables at RUNTIME (not build time), you would add them here. 
+    # Since Vite bundles at BUILD time, your .env file needs to be present during build.
